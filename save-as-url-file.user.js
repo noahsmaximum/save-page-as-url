@@ -77,10 +77,16 @@
                 bottom: 20px;
                 right: 20px;
                 z-index: 2147483647;
+                box-sizing: border-box;
                 display: inline-flex;
                 align-items: center;
-                gap: 6px;
-                padding: 10px 16px;
+                justify-content: center;
+                /* Collapsed: a compact circular icon. */
+                width: 40px;
+                height: 40px;
+                padding: 0;
+                overflow: hidden;
+                white-space: nowrap;
                 font: 600 14px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 color: #fff;
                 background: #2563eb;
@@ -89,17 +95,41 @@
                 box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
                 cursor: pointer;
                 opacity: 0.55;
-                transition: opacity .2s ease, transform .15s ease, background .2s ease, box-shadow .2s ease;
+                transition: width .22s ease, padding .22s ease, opacity .2s ease,
+                            background .2s ease, box-shadow .2s ease, transform .15s ease;
                 user-select: none;
             }
-            #suu-save-btn:hover {
+            /* The emoji icon is always visible and never shrinks. */
+            #suu-save-btn .suu-icon {
+                flex: 0 0 auto;
+                font-size: 16px;
+                line-height: 1;
+            }
+            /* The label is clipped when collapsed and revealed on hover. */
+            #suu-save-btn .suu-label {
+                flex: 0 0 auto;
+                max-width: 0;
+                margin-left: 0;
+                opacity: 0;
+                transition: max-width .22s ease, margin-left .22s ease, opacity .18s ease;
+            }
+            #suu-save-btn:hover,
+            #suu-save-btn:focus-visible {
+                width: 148px;
+                padding: 0 16px;
                 opacity: 1;
                 background: #1d4ed8;
-                transform: translateY(-2px);
                 box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+                outline: none;
+            }
+            #suu-save-btn:hover .suu-label,
+            #suu-save-btn:focus-visible .suu-label {
+                max-width: 120px;
+                margin-left: 8px;
+                opacity: 1;
             }
             #suu-save-btn:active {
-                transform: translateY(0) scale(0.97);
+                transform: scale(0.95);
             }
             #suu-toast {
                 position: fixed;
@@ -150,7 +180,8 @@
         btn.id = 'suu-save-btn';
         btn.type = 'button';
         btn.title = 'Save this page as a Windows .url shortcut';
-        btn.textContent = '💾 Save as .url';
+        btn.setAttribute('aria-label', 'Save as .url');
+        btn.innerHTML = '<span class="suu-icon">💾</span><span class="suu-label">Save as .url</span>';
         btn.addEventListener('click', saveShortcut);
         document.body.appendChild(btn);
     }
