@@ -1,200 +1,169 @@
 // ==UserScript==
-// @name         Save Page as .url File
-// @namespace    http://tampermonkey.net/
-// @version      1.1
-// @description  Download the current page as a Windows .url shortcut file
-// @author       You
+// @name         Save as .url Shortcut
+// @namespace    https://github.com/noahsmaximum/save-as-url
+// @version      1.1.0
+// @description  Adds a floating button to save the current page as a Windows .url internet shortcut file.
+// @author       NoahsMaximum
 // @match        *://*/*
-// @icon         data:image/gif;base64,R0lGODlhAQABAAAAACw=
 // @grant        none
-// @run-at       document-end
+// @run-at       document-idle
+// @license      MIT
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
-    // Create a container for the button
-    const container = document.createElement('div');
-    container.id = 'save-url-container';
-    container.style.cssText = `
-        position: fixed;
-        bottom: 20px;
-        right: 0;
-        z-index: 10000;
-        display: flex;
-        align-items: center;
-        transition: right 0.3s ease;
-    `;
+    // Avoid injecting into iframes — only run on the top-level document.
+    if (window.top !== window.self) return;
 
-    // Create a floating button for saving as .url
-    const button = document.createElement('button');
-    button.id = 'save-url-button';
-    button.textContent = '💾 Save as .url';
-    button.style.cssText = `
-        padding: 10px 15px;
-        background-color: #4CAF50;
-        color: white;
-        border: none;
-        border-radius: 5px 0 0 5px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: bold;
-        box-shadow: -2px 2px 5px rgba(0,0,0,0.2);
-        transition: background-color 0.3s ease, transform 0.1s ease;
-        white-space: nowrap;
-    `;
+    // ---------------------------------------------------------------------
+    // Filename handling
+    // ---------------------------------------------------------------------
 
-    button.addEventListener('mouseenter', function() {
-        this.style.backgroundColor = '#45a049';
-    });
+    // Strip characters that are illegal in Windows filenames, trim trailing
+    // dots/spaces (also illegal on Windows), and cap length so downloads work.
+    function sanitizeFilename(name) {
+        let clean = (name || '')
+            .replace(/[<>:"/\\|?*\x00-\x1F]/g, '') // reserved + control chars
+            .replace(/\s+/g, ' ')                  // collapse whitespace
+            .trim()
+            .replace(/[. ]+$/, '');                // no trailing dot/space
 
-    button.addEventListener('mouseleave', function() {
-        this.style.backgroundColor = '#4CAF50';
-    });
-
-    button.addEventListener('mousedown', function() {
-        this.style.transform = 'scale(0.95)';
-    });
-
-    button.addEventListener('mouseup', function() {
-        this.style.transform = 'scale(1)';
-    });
-
-    button.addEventListener('click', function() {
-        saveAsUrlFile();
-    });
-
-    // Create the arrow indicator
-    const arrow = document.createElement('div');
-    arrow.id = 'save-url-arrow';
-    arrow.textContent = '◀';
-    arrow.style.cssText = `
-        padding: 10px 8px;
-        background-color: #4CAF50;
-        color: white;
-        border-radius: 0 5px 5px 0;
-        cursor: pointer;
-        font-size: 16px;
-        font-weight: bold;
-        box-shadow: -2px 2px 5px rgba(0,0,0,0.2);
-        transition: background-color 0.3s ease;
-        user-select: none;
-    `;
-
-    arrow.addEventListener('mouseenter', function() {
-        this.style.backgroundColor = '#45a049';
-    });
-
-    arrow.addEventListener('mouseleave', function() {
-        this.style.backgroundColor = '#4CAF50';
-    });
-
-    arrow.addEventListener('click', function() {
-        expandPanel();
-    });
-
-    container.appendChild(button);
-    container.appendChild(arrow);
-    document.body.appendChild(container);
-
-    // Initially hide the button, show only the arrow
-    let isExpanded = false;
-    hidePanel();
-
-    function expandPanel() {
-        isExpanded = true;
-        container.style.right = '0';
-        button.style.display = 'block';
-        arrow.textContent = '▶';
+        if (!clean) clean = 'shortcut';
+        if (clean.length > 120) clean = clean.slice(0, 120).trim();
+        return clean + '.url';
     }
 
-    function hidePanel() {
-        isExpanded = false;
-        container.style.right = '-120px';
-        button.style.display = 'none';
-        arrow.textContent = '◀';
+    // ---------------------------------------------------------------------
+    // .url file generation & download
+    // ---------------------------------------------------------------------
+
+    // Build a standard Windows Internet Shortcut. Uses CRLF line endings,
+    // which is what Windows expects for .url files.
+    function buildUrlFile(url) {
+        return '[InternetShortcut]\r\nURL=' + url + '\r\n';
     }
 
-    // Expand on hover, collapse when leaving
-    container.addEventListener('mouseenter', function() {
-        if (!isExpanded) {
-            expandPanel();
-        }
-    });
+    function saveShortcut() {
+        const url = window.location.href;
+        const filename = sanitizeFilename(document.title || window.location.hostname);
+        const content = buildUrlFile(url);
 
-    container.addEventListener('mouseleave', function() {
-        hidePanel();
-    });
+        const blob = new Blob([content], { type: 'application/x-mswinurl' });
+        const objectUrl = URL.createObjectURL(blob);
 
-    function saveAsUrlFile() {
-        const pageTitle = document.title || 'Untitled';
-        const pageUrl = window.location.href;
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
 
-        // Create the .url file content (Windows Internet Shortcut format)
-        const urlFileContent = `[InternetShortcut]\r\nURL=${pageUrl}\r\n`;
+        // Release the object URL once the browser has had a moment to grab it.
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
 
-        // Create a blob from the content
-        const blob = new Blob([urlFileContent], { type: 'text/plain' });
-
-        // Create a download link
-        const downloadLink = document.createElement('a');
-        downloadLink.href = URL.createObjectURL(blob);
-
-        // Sanitize the filename
-        const sanitizedTitle = pageTitle.replace(/[<>:"|?*]/g, '_').substring(0, 100);
-        downloadLink.download = `${sanitizedTitle}.url`;
-
-        // Trigger the download
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-
-        // Clean up the object URL
-        URL.revokeObjectURL(downloadLink.href);
-
-        // Show a brief confirmation message
-        showNotification('✓ File saved as: ' + downloadLink.download);
+        showToast('Saved “' + filename + '”');
     }
 
-    function showNotification(message) {
-        const notification = document.createElement('div');
-        notification.id = 'save-url-notification';
-        notification.textContent = message;
-        notification.style.cssText = `
-            position: fixed;
-            bottom: 80px;
-            right: 20px;
-            z-index: 10001;
-            padding: 12px 18px;
-            background-color: #333;
-            color: #fff;
-            border-radius: 5px;
-            font-size: 14px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-            animation: slideUp 0.3s ease, slideDown 0.3s ease 2.7s forwards;
+    // ---------------------------------------------------------------------
+    // UI: floating button + confirmation toast
+    // ---------------------------------------------------------------------
+
+    function injectStyles() {
+        const style = document.createElement('style');
+        style.textContent = `
+            #suu-save-btn {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                z-index: 2147483647;
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 10px 16px;
+                font: 600 14px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                color: #fff;
+                background: #2563eb;
+                border: none;
+                border-radius: 999px;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+                cursor: pointer;
+                opacity: 0.55;
+                transition: opacity .2s ease, transform .15s ease, background .2s ease, box-shadow .2s ease;
+                user-select: none;
+            }
+            #suu-save-btn:hover {
+                opacity: 1;
+                background: #1d4ed8;
+                transform: translateY(-2px);
+                box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+            }
+            #suu-save-btn:active {
+                transform: translateY(0) scale(0.97);
+            }
+            #suu-toast {
+                position: fixed;
+                bottom: 74px;
+                right: 20px;
+                z-index: 2147483647;
+                max-width: 320px;
+                padding: 10px 14px;
+                font: 500 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                color: #fff;
+                background: #16a34a;
+                border-radius: 8px;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+                opacity: 0;
+                transform: translateY(8px);
+                transition: opacity .25s ease, transform .25s ease;
+                pointer-events: none;
+                word-break: break-word;
+            }
+            #suu-toast.suu-show {
+                opacity: 1;
+                transform: translateY(0);
+            }
         `;
+        (document.head || document.documentElement).appendChild(style);
+    }
 
-        // Add animation styles
-        if (!document.querySelector('#save-url-styles')) {
-            const style = document.createElement('style');
-            style.id = 'save-url-styles';
-            style.textContent = `
-                @keyframes slideUp {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                @keyframes slideDown {
-                    from { opacity: 1; transform: translateY(0); }
-                    to { opacity: 0; transform: translateY(10px); }
-                }
-            `;
-            document.head.appendChild(style);
+    let toastTimer = null;
+    function showToast(message) {
+        let toast = document.getElementById('suu-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'suu-toast';
+            document.body.appendChild(toast);
         }
+        toast.textContent = '✅ ' + message;
 
-        document.body.appendChild(notification);
+        // Force reflow so the transition replays on repeated clicks.
+        void toast.offsetWidth;
+        toast.classList.add('suu-show');
 
-        setTimeout(() => {
-            notification.remove();
-        }, 3000);
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove('suu-show'), 2600);
+    }
+
+    function createButton() {
+        const btn = document.createElement('button');
+        btn.id = 'suu-save-btn';
+        btn.type = 'button';
+        btn.title = 'Save this page as a Windows .url shortcut';
+        btn.textContent = '💾 Save as .url';
+        btn.addEventListener('click', saveShortcut);
+        document.body.appendChild(btn);
+    }
+
+    function init() {
+        if (document.getElementById('suu-save-btn')) return;
+        injectStyles();
+        createButton();
+    }
+
+    if (document.body) {
+        init();
+    } else {
+        window.addEventListener('DOMContentLoaded', init);
     }
 })();
