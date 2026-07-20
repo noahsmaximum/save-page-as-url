@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Save as .url Shortcut
 // @namespace    https://github.com/noahsmaximum/save-as-url
-// @version      1.1.0
+// @version      1.2.0
 // @description  Adds a floating button to save the current page as a Windows .url internet shortcut file.
 // @author       NoahsMaximum
 // @match        *://*/*
